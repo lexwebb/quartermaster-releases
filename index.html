@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quartermaster</title>
+<meta name="description" content="A personal AI-ops agent. It watches every coding session across all your repos, your PRs and your Slack, then reviews, answers, digests and pings you when something needs you. macOS, Linux and Windows.">
+<meta property="og:title" content="Quartermaster — run ten agents, lose track of none">
+<meta property="og:description" content="A personal AI-ops agent for your AI coding-session fleet, PRs and Slack. Local-first.">
+<meta property="og:image" content="icon-192.png">
+<meta name="theme-color" content="#1c1b19">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Schibsted+Grotesk:wght@400;500;600;700&display=swap">
+<style>
+  /* "Quartermaster Site.dc.html", design drop (20). Dark only, as designed. */
+  :root {
+    --canvas: oklch(0.15 0.003 90);
+    --recess: oklch(0.135 0.003 90);
+    --surface: oklch(0.195 0.004 90);
+    --mine: oklch(0.18 0.006 85);
+    --inset: oklch(0.20 0.004 90);
+    --rule: oklch(0.21 0.004 90);
+    --line: oklch(0.28 0.004 90);
+    --ink: oklch(0.92 0.006 90);
+    --soft: oklch(0.85 0.006 90);
+    --lede: oklch(0.75 0.008 90);
+    --body: oklch(0.72 0.008 90);
+    --quiet: oklch(0.60 0.008 90);
+    --good: oklch(0.80 0.12 150);
+    --warn: oklch(0.82 0.12 75);
+    --info: oklch(0.80 0.11 205);
+    --violet: oklch(0.76 0.11 300);
+    --link: oklch(0.78 0.11 250);
+    --amber: #F0BE5E;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --sans: "Schibsted Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --pad-x: clamp(20px, 4vw, 48px);
+    --pad-y: clamp(64px, 9vw, 128px);
+    color-scheme: dark;
+  }
+  html, body {
+    margin: 0; background: var(--canvas); color: var(--ink);
+    font-family: var(--mono); font-size: 13px;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* Not on body: Schibsted Grotesk's tabular figures widen its punctuation too ("agents ."). */
+  .frow, .jrow, .status, .plat .info { font-variant-numeric: tabular-nums; }
+  * { box-sizing: border-box; }
+  a { color: var(--link); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  ::selection { background: var(--amber); color: var(--canvas); }
+  :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  code { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+  .sans { font-family: var(--sans); }
+  .amber { color: var(--amber); }
+  .q { color: var(--quiet); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: var(--pad-y) var(--pad-x); }
+  .sec { border-bottom: 1px solid var(--line); }
+  .sec.alt { background: var(--recess); }
+  .eyebrow { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--quiet); }
+  .h2 { margin: 0; font-family: var(--sans); font-weight: 600; font-size: clamp(32px, 3.8vw, 56px); line-height: 1; letter-spacing: -.03em; text-wrap: balance; }
+  .p { margin: 0; font-family: var(--sans); font-size: 16px; line-height: 1.55; color: var(--body); text-wrap: pretty; }
+  .stack { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .key { padding: 0 4px; border: 1px solid var(--line); color: var(--ink); }
+  .key.go { padding: 0 6px; border: 0; background: var(--warn); color: var(--canvas); }
+  .keys { display: flex; gap: 14px; font-size: 11.5px; color: var(--quiet); }
+  .keys > span { display: flex; gap: 6px; align-items: center; }
+  .panel { min-width: 0; border: 1px solid var(--line); background: var(--recess); }
+  .panel-head { height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--line); font-size: 11.5px; color: var(--quiet); }
+
+  /* header */
+  header { position: sticky; top: 0; z-index: 10; height: 44px; display: flex; align-items: stretch; border-bottom: 1px solid var(--line); background: oklch(0.135 0.003 90 / .92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  header a { display: flex; align-items: center; padding: 0 16px; color: var(--quiet); font-size: 12px; text-decoration: none; }
+  header a:hover { color: var(--ink); text-decoration: none; }
+  header .brand { gap: 10px; padding: 0 18px; border-right: 1px solid var(--line); color: var(--ink); }
+  header .brand span { font-family: var(--sans); font-weight: 600; font-size: 15px; letter-spacing: -.01em; }
+  header nav { display: flex; align-items: stretch; flex: 1; min-width: 0; overflow: hidden; }
+  header nav a { border-right: 1px solid var(--line); white-space: nowrap; }
+  header .rel { border-left: 1px solid var(--line); white-space: nowrap; }
+  header .cta { gap: 8px; padding: 0 18px; background: var(--amber); color: var(--canvas); font-weight: 700; }
+  header .cta:hover { color: var(--canvas); }
+  @media (max-width: 720px) { header nav, header .rel { display: none; } header .brand { margin-right: auto; } }
+
+  /* hero */
+  .hero { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; }
+  .grid-bg { position: absolute; inset: 0; opacity: .55; background-size: 48px 48px;
+    background-image: linear-gradient(var(--rule) 1px, transparent 1px), linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    mask-image: radial-gradient(ellipse at 70% 40%, black 20%, transparent 75%); -webkit-mask-image: radial-gradient(ellipse at 70% 40%, black 20%, transparent 75%); }
+  .hero .wrap { position: relative; padding: clamp(48px, 8vw, 104px) var(--pad-x) 64px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: clamp(40px, 5vw, 72px); align-items: center; }
+  .hero .copy { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+  .badge { display: flex; font-size: 11.5px; border: 1px solid var(--line); align-self: flex-start; }
+  .badge span { padding: 5px 10px; color: var(--quiet); }
+  .badge .v { background: var(--good); color: var(--canvas); font-weight: 700; }
+  h1 { margin: 0; font-family: var(--sans); font-weight: 600; font-size: clamp(44px, 6.4vw, 92px); line-height: .95; letter-spacing: -.035em; text-wrap: balance; }
+  .lede { margin: 0; max-width: 520px; font-family: var(--sans); font-size: clamp(16px, 1.5vw, 19px); line-height: 1.5; color: var(--lede); text-wrap: pretty; }
+  .ctas { display: flex; flex-wrap: wrap; gap: 12px; align-items: stretch; }
+  .btn { display: flex; align-items: center; gap: 14px; padding: 14px 20px; background: var(--amber); color: var(--canvas); font-weight: 700; font-size: 13.5px; }
+  .btn:hover { text-decoration: none; filter: brightness(1.06); }
+  .btn .f { font-weight: 400; opacity: .7; }
+  .btn.ghost { gap: 12px; padding: 14px 18px; background: transparent; border: 1px solid var(--line); color: var(--ink); font-weight: 400; font-size: 13px; }
+  .btn.ghost:hover { border-color: var(--quiet); filter: none; }
+  .also { display: flex; flex-wrap: wrap; gap: 18px; font-size: 11.5px; color: var(--quiet); }
+
+  .fleet { box-shadow: 0 40px 80px -20px oklch(0 0 0 / .6), 0 0 0 1px oklch(0 0 0 / .3); }
+  .tabs { height: 32px; display: flex; align-items: stretch; border-bottom: 1px solid var(--line); font-size: 11.5px; }
+  .tabs > span { display: flex; align-items: center; gap: 6px; padding: 0 12px; border-right: 1px solid var(--line); color: var(--quiet); white-space: nowrap; }
+  .tabs .on { color: var(--ink); box-shadow: inset 0 -2px 0 var(--ink); }
+  .tabs .lights i { width: 9px; height: 9px; background: var(--line); }
+  .tabs .fill { flex: 1; border: 0; padding: 0; }
+  .tabs .count { border-right: 0; border-left: 1px solid var(--line); }
+  .frow { display: grid; grid-template-columns: 16px minmax(0, .8fr) minmax(0, 1.5fr) 60px 48px; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--rule); font-size: 12.5px; align-items: center; transition: background 400ms; }
+  .frow.head { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--quiet); }
+  .frow.hot { background: var(--surface); }
+  .frow .g { transition: color 300ms; }
+  .frow .repo { font-family: var(--sans); font-weight: 500; font-size: 13.5px; }
+  .frow .m { color: var(--quiet); font-size: 11.5px; }
+  .frow .age { text-align: right; }
+  .rows { min-height: 200px; }
+  .foot { min-height: 78px; padding: 12px 14px; display: flex; flex-direction: column; justify-content: center; gap: 8px; border-top: 1px dashed var(--line); transition: border-color 300ms; }
+  .foot .line { display: flex; gap: 10px; font-size: 12px; align-items: baseline; }
+  .foot .t { color: var(--soft); }
+  .foot .keys { padding-left: 20px; }
+  .caret { color: var(--amber); }
+  .status { height: 26px; display: flex; align-items: stretch; font-size: 11.5px; background: var(--inset); }
+  .status > span { display: flex; align-items: center; padding: 0 12px; border-right: 1px solid var(--line); color: var(--quiet); white-space: nowrap; }
+  .status .mode { font-weight: 700; background: var(--good); color: var(--canvas); border: 0; }
+  .status .fill { flex: 1; border: 0; padding: 0; }
+  .status .ctx { gap: 8px; border: 0; }
+  .status .ctx b { font-weight: 400; letter-spacing: 1px; }
+  @media (max-width: 520px) { .status .addr { display: none; } .frow { grid-template-columns: 16px minmax(0, .8fr) minmax(0, 1.5fr) 48px; } .frow .agent { display: none; } }
+
+  /* why */
+  .big { margin: 0; max-width: 1000px; font-family: var(--sans); font-weight: 500; font-size: clamp(28px, 3.6vw, 52px); line-height: 1.12; letter-spacing: -.025em; text-wrap: pretty; }
+  .cells { display: grid; border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .cells > * { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .pillars { margin-top: clamp(48px, 6vw, 80px); grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
+  .pillar { padding: 28px 24px 32px; display: flex; flex-direction: column; gap: 14px; }
+  .pillar .k { font-size: 12px; }
+  .pillar .t { font-family: var(--sans); font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+  .pillar .d { font-family: var(--sans); font-size: 15px; line-height: 1.55; color: var(--body); text-wrap: pretty; }
+
+  /* jobs */
+  .split { display: grid; gap: clamp(40px, 6vw, 96px); }
+  .jobs-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); align-items: start; }
+  .sticky { position: sticky; top: 80px; }
+  .jobs { min-width: 0; border-top: 1px solid var(--line); }
+  .jrow { display: grid; grid-template-columns: 16px minmax(0, 1fr) minmax(0, 1fr) 56px; gap: 12px; align-items: baseline; font-size: 13px; }
+  .jrow.head { padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--quiet); }
+  .job { display: flex; flex-direction: column; gap: 6px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  .job .g { transition: opacity 300ms; }
+  .job .n { font-weight: 500; }
+  .job .s, .job .nx { color: var(--quiet); font-size: 11.5px; }
+  .job .nx, .jrow.head :last-child { text-align: right; }
+  .job .d { padding-left: 28px; font-family: var(--sans); font-size: 14.5px; line-height: 1.5; color: var(--body); text-wrap: pretty; }
+
+  /* chat */
+  .chat-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); align-items: center; }
+  .convo { min-height: 380px; padding: 0 0 16px; display: flex; flex-direction: column; }
+  .you { background: var(--surface); padding: 14px 16px; display: flex; gap: 10px; font-family: var(--sans); font-size: 15px; line-height: 1.5; }
+  .reply { padding: 14px 16px 6px; font-family: var(--sans); font-size: 15px; line-height: 1.55; color: var(--soft); text-wrap: pretty; }
+  .tool { display: grid; grid-template-columns: 16px auto minmax(0, 1fr) auto; gap: 10px; padding: 8px 16px; font-size: 12px; color: var(--quiet); align-items: baseline; }
+  .brief { margin: 8px 16px 0; padding: 14px 16px; border-top: 1px dashed oklch(0.82 0.12 75 / .5); border-bottom: 1px dashed oklch(0.82 0.12 75 / .5); display: flex; flex-direction: column; gap: 12px; }
+  .brief .meta { display: flex; gap: 16px; font-size: 11.5px; color: var(--quiet); flex-wrap: wrap; }
+  .brief .b { font-family: var(--sans); font-size: 14.5px; line-height: 1.55; color: var(--soft); text-wrap: pretty; }
+  .defs { display: flex; flex-direction: column; border-top: 1px solid var(--line); }
+  .defs > div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 12px; }
+  .defs > div > :last-child { color: var(--quiet); }
+  [hidden] { display: none !important; }
+
+  /* local-first */
+  .local-head { grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: clamp(32px, 5vw, 80px); align-items: end; }
+  .local { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); border: 1px solid var(--line); }
+  .tree { padding: 22px 24px; border-right: 1px solid var(--line); font-size: 12.5px; line-height: 1.85; min-width: 0; overflow-x: auto; }
+  .tree pre { margin: 0; font: inherit; color: var(--soft); }
+  .checks { display: flex; flex-direction: column; min-width: 0; }
+  .check { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 12px; padding: 18px 24px; border-bottom: 1px solid var(--line); }
+  .check:last-child { border-bottom: 0; }
+  .check > div { display: flex; flex-direction: column; gap: 4px; }
+  .check .n { font-size: 12.5px; }
+  .check .d { font-family: var(--sans); font-size: 14px; color: var(--body); line-height: 1.5; }
+  @media (max-width: 760px) { .tree { border-right: 0; border-bottom: 1px solid var(--line); } }
+
+  /* download */
+  .dl-h { font-size: clamp(40px, 5.6vw, 80px); line-height: .95; letter-spacing: -.035em; }
+  .platforms { grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+  .plat { display: flex; flex-direction: column; gap: 18px; padding: 28px 24px; color: var(--ink); transition: background 200ms; }
+  .plat:hover { background: var(--surface); text-decoration: none; }
+  .plat.mine { background: var(--mine); }
+  .plat .top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .plat .name { font-family: var(--sans); font-size: 26px; font-weight: 600; letter-spacing: -.02em; }
+  .plat .yours { font-size: 11px; color: var(--amber); }
+  .plat .info { display: flex; flex-direction: column; gap: 6px; font-size: 12px; color: var(--quiet); padding-bottom: 6px; }
+  .plat .file { color: var(--ink); overflow-wrap: anywhere; }
+  .plat .more { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+  .plat .go { margin-top: auto; align-self: flex-start; display: flex; gap: 10px; align-items: center; padding: 10px 14px; font-size: 12px; font-weight: 700; border: 1px solid var(--line); color: var(--ink); }
+  .plat.mine .go { background: var(--amber); border-color: var(--amber); color: var(--canvas); }
+  .reqs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); font-size: 12.5px; }
+  .reqs > div { display: grid; grid-template-columns: 16px 90px minmax(0, 1fr); gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--rule); }
+  .reqs > div > :last-child { color: var(--quiet); }
+  .dl-note { font-size: 11.5px; color: var(--quiet); }
+
+  footer { max-width: 1280px; margin: 0 auto; padding: 36px var(--pad-x) 48px; display: flex; flex-wrap: wrap; gap: 20px 32px; align-items: center; font-size: 11.5px; color: var(--quiet); }
+  footer .mark { display: flex; align-items: center; gap: 10px; color: var(--ink); }
+  footer .fill { flex: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="brand" href="#top" aria-label="Quartermaster, top of page">
+    <svg viewBox="2 2 12 12" width="18" height="18" aria-hidden="true"><path d="M13 8V3H3v10h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/><rect x="10" y="10" width="4" height="4" fill="#F0BE5E"/></svg>
+    <span>quartermaster</span>
+  </a>
+  <nav aria-label="Sections">
+    <a href="#why">why</a>
+    <a href="#jobs">jobs</a>
+    <a href="#chat">fleet chat</a>
+    <a href="#local">local-first</a>
+  </nav>
+  <a class="rel" data-rel href="https://github.com/lexwebb/quartermaster-releases/releases/latest">releases ↗</a>
+  <a class="cta" href="#download">download <span aria-hidden="true">↓</span></a>
+</header>
+
+<main>
+<section id="top" class="hero">
+  <div class="grid-bg" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="copy">
+      <div class="badge"><span class="v" id="version">latest</span><span>macOS · Linux · Windows</span></div>
+      <h1>Run ten agents.<br><span class="amber">Lose track of none.</span></h1>
+      <p class="lede">A personal AI-ops agent. It watches every coding session across all your repos, your PRs and your Slack — then reviews, answers, digests and pings you when something needs you. It never does the work itself.</p>
+      <div class="ctas">
+        <a class="btn" id="primary" href="#download"><span id="primary-label">Download</span><span class="f" id="primary-file"></span></a>
+        <a class="btn ghost" href="#why"><span>how it works</span><span class="q">↓</span></a>
+      </div>
+      <div class="also"><span id="also">macOS, Linux and Windows</span><a href="#download">all downloads →</a></div>
+    </div>
+
+    <div class="panel fleet" aria-label="Example: the fleet view as sessions change state" role="img">
+      <div class="tabs">
+        <span class="lights"><i></i><i></i><i></i></span>
+        <span class="on">1 now</span><span>2 chat</span><span>3 review</span>
+        <span class="fill"></span>
+        <span class="count" style="color:var(--warn)">◆ <b id="n-waiting">0</b></span>
+        <span class="count" style="color:var(--good)">● <b id="n-working">0</b></span>
+      </div>
+      <div class="frow head"><span></span><span>repo</span><span>branch</span><span class="agent">agent</span><span class="age">age</span></div>
+      <div class="rows" id="fleet-rows"></div>
+      <div class="foot" id="foot">
+        <div class="line"><span id="foot-g"></span><span class="t ell"><span id="foot-t"></span><span class="caret" id="caret">▍</span></span></div>
+        <div class="keys" id="foot-keys" hidden><span><span class="key go">y</span>yes</span><span><span class="key">a</span>always</span><span><span class="key">n</span>no</span></div>
+      </div>
+      <div class="status">
+        <span class="mode">fleet</span><span>read-only</span><span class="addr">127.0.0.1:7717</span>
+        <span class="fill"></span>
+        <span class="ctx">ctx <b><span style="color:var(--good)" id="ctx-fill"></span><span style="color:var(--line)" id="ctx-empty"></span></b></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="why" class="sec">
+  <div class="wrap">
+    <div class="eyebrow" style="margin-bottom:28px">01 · why</div>
+    <p class="big">You started six agents across four repos before lunch. <span class="q">One finished an hour ago. One has been sitting on a permission prompt since 10:40. Two PRs need a review and someone asked you a question in Slack.</span></p>
+    <div class="cells pillars">
+      <div class="pillar"><span class="k" style="color:var(--good)">● watches</span><span class="t">Every session, every repo.</span><span class="d">Claude, Codex, Gemini, Ollama, agy — including the ones you started by hand. Fleetwatch re-indexes every 3 minutes with zero LLM calls.</span></div>
+      <div class="pillar"><span class="k" style="color:var(--warn)">◆ asks</span><span class="t">One inbox for what needs you.</span><span class="d">Permission prompts, finished results, red CI, stalled reviews. Desktop when you're here, Slack when you're away — never both.</span></div>
+      <div class="pillar"><span class="k" style="color:var(--violet)">◇ delegates</span><span class="t">Briefs, not keystrokes.</span><span class="d">Ask the fleet chat for something and it queues a new session with a standalone brief. Nothing runs until you press y.</span></div>
+    </div>
+  </div>
+</section>
+
+<section id="jobs" class="sec alt">
+  <div class="wrap split jobs-grid">
+    <div class="stack sticky">
+      <div class="eyebrow">02 · jobs</div>
+      <h2 class="h2">Small scheduled jobs. Each one switched on by a config key.</h2>
+      <p class="p" style="max-width:440px">No config gets you the dashboard, fleet chat and index. Add <code>githubOrg</code> and reviews start. Add <code>botToken</code> and it talks to Slack. Every key is optional.</p>
+    </div>
+    <div class="jobs">
+      <div class="jrow head"><span></span><span>job</span><span>schedule</span><span>next</span></div>
+      <div id="job-rows"></div>
+    </div>
+  </div>
+</section>
+
+<section id="chat" class="sec">
+  <div class="wrap split chat-grid">
+    <div class="panel" aria-label="Example: a fleet chat exchange that queues a session" role="img">
+      <div class="panel-head"><span>qm · fleet chat</span><span>acp · read-only mcp</span></div>
+      <div class="convo">
+        <div class="you" id="c1" hidden><span class="q">›</span><span></span></div>
+        <div class="reply" id="c2" hidden></div>
+        <div class="tool" id="c3" hidden><span style="color:var(--violet)">◇</span><span style="color:var(--ink)">spawn_session</span><span class="ell"></span><span>queued</span></div>
+        <div class="brief" id="c4" hidden>
+          <div class="meta"><span>web</span><span>worktree test/onboarding-e2e</span><span>claude · acceptEdits</span><span>limit 60m · $5</span></div>
+          <div class="b"></div>
+          <div class="keys" id="c5" hidden style="gap:16px"><span><span class="key go">y</span>approve</span><span><span class="key">e</span>edit brief</span><span><span class="key">n</span>skip</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="stack">
+      <div class="eyebrow">03 · fleet chat</div>
+      <h2 class="h2">The one agent that refuses to write code.</h2>
+      <p class="p" style="max-width:480px">The chat is a persistent master session over ACP. It sees the whole fleet through a read-only MCP server, and the harness refuses edits and mutating shell commands. Ask it to do something and it writes a brief for a new session — in a fresh worktree, with spend limits — then waits for you.</p>
+      <div class="defs">
+        <div><span>what_now</span><span>one ranked list of what you can do next</span></div>
+        <div><span>get_fleet</span><span>every session, live, by status</span></div>
+        <div><span>add_backlog_item</span><span>"idea: …" goes to later, not to a spawn</span></div>
+        <div><span>⌃space</span><span>dictate; whisper runs on your machine</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="local" class="sec alt">
+  <div class="wrap" style="display:flex;flex-direction:column;gap:clamp(40px,5vw,64px)">
+    <div class="split local-head">
+      <div class="stack">
+        <div class="eyebrow">04 · local-first</div>
+        <h2 class="h2">One folder. One loopback port. No account.</h2>
+      </div>
+      <p class="p" style="max-width:520px">Config, state and the memory brain live in <code>~/.quartermaster</code>. The dashboard binds to 127.0.0.1. Embeddings and transcription run locally, so review text never leaves the machine. Want it on your phone? Put it behind tailscale serve, allowlisted by login.</p>
+    </div>
+    <div class="local">
+      <div class="tree">
+        <div class="eyebrow" style="margin-bottom:10px">~/.quartermaster</div>
+<pre>├─ <span class="amber">config.json</span>       <span class="q">every key optional</span>
+├─ brain.sqlite      <span class="q">decisions · rag memory</span>
+├─ workflows/        <span class="q">bowlyn yaml overlays</span>
+├─ models/           <span class="q">whisper · ollama</span>
+├─ logs/             <span class="q">7 days kept</span>
+└─ state/
+   ├─ repos/         <span class="q">bare-clone cache</span>
+   └─ wt/            <span class="q">throwaway worktrees</span></pre>
+      </div>
+      <div class="checks">
+        <div class="check"><span style="color:var(--good)">✓</span><div><span class="n">shadow mode</span><span class="d">Every outward post goes through one gate. Flip it on and posts come to you instead, marked "would post to #x".</span></div></div>
+        <div class="check"><span style="color:var(--good)">✓</span><div><span class="n">sandboxed sub-agents</span><span class="d">Reviews run in throwaway worktrees with a read-only tool allowlist and a budget cap.</span></div></div>
+        <div class="check"><span style="color:var(--good)">✓</span><div><span class="n">allowlisted in code</span><span class="d">Slack ask/review requests check the sender in code, not in the classifier. A prompt-injected message can't trigger them.</span></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="download" class="sec">
+  <div class="wrap" style="display:flex;flex-direction:column;gap:40px">
+    <div class="stack">
+      <div class="eyebrow">05 · download</div>
+      <h2 class="h2 dl-h">Install it. <span class="amber">It updates itself.</span></h2>
+      <p class="p" style="max-width:560px">Needs git and the Claude CLI logged in. First launch walks you through connections and local models.</p>
+    </div>
+    <div class="cells platforms" id="platforms"></div>
+    <div class="dl-note" id="dl-note" hidden></div>
+    <div class="panel">
+      <div class="panel-head">first launch · checks what you have</div>
+      <div class="reqs">
+        <div><span style="color:var(--good)">✓</span><span>git</span><span>required</span></div>
+        <div><span style="color:var(--good)">✓</span><span>claude</span><span>required · logged in</span></div>
+        <div><span class="q">○</span><span>github</span><span>optional · PR reviews</span></div>
+        <div><span class="q">○</span><span>slack bot</span><span>optional · digests, pings</span></div>
+        <div><span class="q">○</span><span>linear</span><span>optional · issue context</span></div>
+        <div><span class="q">○</span><span>ollama</span><span>optional · local models</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<footer>
+  <span class="mark"><svg viewBox="2 2 12 12" width="14" height="14" aria-hidden="true"><path d="M13 8V3H3v10h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"/><rect x="10" y="10" width="4" height="4" fill="#F0BE5E"/></svg>quartermaster</span>
+  <span class="fill"></span>
+  <a href="https://polyformproject.org/licenses/noncommercial/1.0.0">PolyForm Noncommercial</a>
+  <a data-rel href="https://github.com/lexwebb/quartermaster-releases/releases/latest">releases</a>
+  <span>© 2026 Lex Southin-Webb</span>
+</footer>
+
+<script type="module">
+  import { LATEST_API, RELEASES_PAGE, detectOs, downloads, formatSize } from "./release.js";
+
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const LATEST = `${RELEASES_PAGE}/latest`;
+
+  // ── downloads: the real latest release, the visitor's OS first ─────────────────────────────
+  const os = detectOs(navigator) ?? "mac";
+  const PLATFORMS = [
+    { os: "mac", name: "macOS", file: "Quartermaster.dmg", note: "Not notarized yet: right-click → Open on first launch." },
+    { os: "linux", name: "Linux", file: ".AppImage · .deb · .rpm", note: "The AppImage updates itself; .deb and .rpm update by reinstalling." },
+    { os: "windows", name: "Windows", file: "Quartermaster-setup.exe", note: "Per-user, no admin. SmartScreen may warn on first run." },
+  ];
+  const NAMES = { mac: ["Download for macOS", ".dmg"], windows: ["Download for Windows", ".exe"], linux: ["Download for Linux", ".AppImage"] };
+  const OTHERS = { mac: "also for Linux and Windows", windows: "also for macOS and Linux", linux: "also for macOS and Windows" };
+
+  function renderDownloads(files) {
+    $("platforms").innerHTML = PLATFORMS.map((p) => {
+      const mine = files.filter((f) => f.os === p.os);
+      const best = mine[0];
+      const href = best?.url ?? LATEST;
+      const file = best ? `${best.name} · ${formatSize(best.size)}` : p.file;
+      const more = mine.slice(1).map((f) => `<a href="${esc(f.url)}">${esc(f.label.split(" · ")[1])} · ${formatSize(f.size)}</a>`).join("");
+      return `<div class="plat${p.os === os ? " mine" : ""}">
+        <div class="top"><span class="name">${p.name}</span><span class="yours">${p.os === os ? "● your platform" : ""}</span></div>
+        <div class="info"><span class="file">${esc(file)}</span><span>${p.note}</span>${more ? `<span class="more">${more}</span>` : ""}</div>
+        <a class="go" href="${esc(href)}">${best ? esc(best.label.split(" · ")[1] ?? "download") : "download"} ↓</a>
+      </div>`;
+    }).join("");
+    const best = files.find((f) => f.os === os);
+    $("primary").href = best?.url ?? "#download";
+    $("primary-label").textContent = NAMES[os][0];
+    $("primary-file").textContent = NAMES[os][1];
+    $("also").textContent = OTHERS[os];
+  }
+
+  function note(text) { $("dl-note").hidden = false; $("dl-note").innerHTML = text; }
+
+  renderDownloads([]);
+  fetch(LATEST_API, { headers: { Accept: "application/vnd.github+json" } })
+    .then((r) => (r.status === 404 ? null : r.ok ? r.json() : Promise.reject(r.status)))
+    .then((rel) => {
+      if (!rel) {
+        $("version").textContent = "coming soon";
+        note(`<span style="color:var(--warn)">◐</span> No public release yet. Builds land on the <a href="${RELEASES_PAGE}">releases page</a> when the first one ships.`);
+        return;
+      }
+      $("version").textContent = `${rel.tag_name} · latest`;
+      document.querySelectorAll("[data-rel]").forEach((a) => (a.href = rel.html_url));
+      renderDownloads(downloads(rel));
+    })
+    .catch(() => note(`Couldn't reach GitHub just now. Every build is on the <a href="${RELEASES_PAGE}">releases page</a>.`));
+
+  // ── the hero fleet, the job clocks and the chat: one 100 ms clock, still under reduced motion ──
+  const C = { good: "var(--good)", warn: "var(--warn)", info: "var(--info)", dim: "var(--quiet)", violet: "var(--violet)", line: "var(--line)" };
+  const ST = { working: ["●", C.good], waiting: ["◆", C.warn], done: ["✓", C.info], idle: ["·", C.dim], queued: ["◇", C.violet] };
+  const BASE = [
+    { id: 1, repo: "api", branch: "fix/rate-limit-retry", agent: "claude", age0: 14 },
+    { id: 2, repo: "web", branch: "feat/onboarding-flow", agent: "codex", age0: 41 },
+    { id: 3, repo: "billing", branch: "chore/deps-oct", agent: "ollama", age0: 96 },
+    { id: 4, repo: "infra", branch: "tf/provider-upgrade", agent: "claude", age0: 7 },
+  ];
+  const STEPS = 16, STEP_T = 14;
+  function frame(s) {
+    const st = { 1: "working", 2: "working", 3: "idle", 4: "working" };
+    let extra = null, hot = 0;
+    let foot = { g: "·", c: C.dim, t: "fleetwatch · 4 sessions indexed · 0 llm calls", k: false, b: C.line };
+    if (s >= 2) st[2] = "done";
+    if (s >= 2 && s < 4) { hot = 2; foot = { g: "✓", c: C.info, t: "web feat/onboarding-flow → result ready", k: false, b: C.line }; }
+    if (s >= 4 && s < 5) foot = { g: "›", c: C.dim, t: "add e2e coverage for onboarding", k: false, b: C.line, type: true };
+    if (s >= 5) extra = { id: 5, repo: "web", branch: "test/onboarding-e2e", agent: "claude", age0: 0, st: s >= 7 ? "working" : "queued" };
+    if (s >= 5 && s < 7) { hot = 5; foot = { g: "◇", c: C.violet, t: "spawn_session · web · test/onboarding-e2e", k: true, b: C.warn }; }
+    if (s === 7) { hot = 5; foot = { g: "●", c: C.good, t: "approved → session started in a fresh worktree", k: false, b: C.line }; }
+    if (s >= 8 && s < 10) { st[4] = "waiting"; hot = 4; foot = { g: "◆", c: C.warn, t: "infra wants to run: terraform plan -out=tfplan", k: true, b: C.warn }; }
+    if (s >= 11) st[1] = "done";
+    if (s >= 10 && s < 11) foot = { g: "✓", c: C.good, t: "[y] allowed once · infra resumed", k: false, b: C.line };
+    if (s >= 11 && s < 13) { hot = 1; foot = { g: "✓", c: C.info, t: "api fix/rate-limit-retry → PR #412 opened", k: false, b: C.line }; }
+    if (s >= 13) { st[3] = "working"; hot = 3; foot = { g: "●", c: C.good, t: "review · acme/web#418 → posted to GitHub as you", k: false, b: C.line }; }
+    const rows = BASE.map((r) => ({ ...r, st: st[r.id] }));
+    if (extra) rows.push(extra);
+    return { rows, foot, hot };
+  }
+  const fmtAge = (m) => (m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`);
+  const JOBS = [
+    { name: "fleetwatch", sched: "every 3m · always", p: 180, o: 40, desc: "Re-indexes every session and pings you when one moves to waiting or done." },
+    { name: "review", sched: "every 5m · 24/7", p: 300, o: 120, desc: "Reviews org PRs nobody has touched, in a sandboxed worktree, posted to GitHub as you." },
+    { name: "slackwatch", sched: "every 5m · 09–18", p: 300, o: 200, desc: "Replies to mentions, flags code issues, answers allowlisted teammates grounded in the code." },
+    { name: "digest", sched: "every 30m · 09–18", p: 1800, o: 900, desc: "A short status digest. The first one each day is a fuller morning brief. Quiet intervals post nothing." },
+    { name: "reviewernudge", sched: "every 30m · 09–18", p: 1800, o: 300, desc: "Spots stalled reviews on your PRs and drafts a nudge. Learns each reviewer’s turnaround." },
+    { name: "mergewatch", sched: "every 5m · opt-in", p: 300, o: 20, desc: "Knows when your PRs are ready to merge, per repo policy. Shadow, when-away or on." },
+    { name: "dashboard", sched: "resident · :7717", p: 0, o: 0, desc: "Fleet chat, now, review, workflows and settings. Keyboard-first, live over SSE." },
+  ];
+  const CHAT = [
+    "web onboarding merged. can someone add e2e coverage before friday?",
+    "I don't write code — I'll queue a session for it. codex finished feat/onboarding-flow 6m ago, and nothing is covering it yet.",
+    "web · worktree test/onboarding-e2e · claude",
+    "Write Playwright e2e for the onboarding flow in apps/web/onboarding. Cover skip, back and resume. Open a PR; do not merge.",
+  ];
+  const CHAT_TOTAL = CHAT.reduce((a, s) => a + s.length, 0);
+
+  function draw(t) {
+    const step = Math.floor(t / STEP_T) % STEPS, sub = t % STEP_T;
+    const { rows, foot, hot } = frame(step);
+    const mins = Math.floor(t / 20);
+    $("fleet-rows").innerHTML = rows.map((r) => {
+      const [g, c] = ST[r.st];
+      const age = r.age0 + mins < 1 ? "now" : fmtAge(r.age0 + mins);
+      return `<div class="frow${r.id === hot ? " hot" : ""}"><span class="g" style="color:${c}">${g}</span><span class="repo ell">${r.repo}</span><span class="m ell">${r.branch}</span><span class="m agent">${r.agent}</span><span class="m age">${age}</span></div>`;
+    }).join("");
+    $("n-waiting").textContent = rows.filter((r) => r.st === "waiting" || r.st === "queued").length;
+    $("n-working").textContent = rows.filter((r) => r.st === "working").length;
+    $("foot-g").textContent = foot.g;
+    $("foot-g").style.color = foot.c;
+    $("foot-t").textContent = foot.type ? foot.t.slice(0, Math.min(foot.t.length, sub * 3)) : foot.t;
+    $("foot").style.borderTopColor = foot.b;
+    $("foot-keys").hidden = !foot.k;
+    $("caret").style.opacity = Math.floor(t / 5) % 2 ? 1 : 0;
+    const ctx = Math.min(9, 3 + Math.floor(step / 3));
+    $("ctx-fill").textContent = "▮".repeat(ctx);
+    $("ctx-empty").textContent = "▮".repeat(10 - ctx);
+
+    const secs = t / 10;
+    $("job-rows").innerHTML = JOBS.map((j) => {
+      let glyph = "●", color = C.good, pulse = 1, next = "live", nextColor = C.good;
+      if (j.p) {
+        const left = Math.ceil(j.p - ((secs * 12 + j.o) % j.p));
+        const running = left > j.p - 6;
+        glyph = running ? "◐" : "●"; color = running ? C.warn : C.good;
+        pulse = running ? (Math.floor(t / 3) % 2 ? 1 : 0.4) : 1;
+        next = running ? "running" : `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+        nextColor = running ? C.warn : C.dim;
+      }
+      return `<div class="job"><div class="jrow"><span class="g" style="color:${color};opacity:${pulse}">${glyph}</span><span class="n">${j.name}</span><span class="s">${j.sched}</span><span class="nx" style="color:${nextColor}">${next}</span></div><div class="d">${j.desc}</div></div>`;
+    }).join("");
+
+    let budget = Math.max(0, ((t * 4) % (CHAT_TOTAL + 260)) - 20);
+    const shown = CHAT.map((s) => { const n = Math.min(s.length, budget); budget -= n; return n > 0 ? s.slice(0, n) : null; });
+    const set = (id, text, el) => { $(id).hidden = !text; if (text) (el ? $(id).querySelector(el) : $(id)).textContent = text; };
+    set("c1", shown[0], "span:last-child");
+    set("c2", shown[1]);
+    set("c3", shown[2], ".ell");
+    set("c4", shown[3], ".b");
+    $("c5").hidden = budget <= 40;
+  }
+
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) {
+    // The design's still frame: a queued spawn waiting on [y], and the whole conversation.
+    draw(5 * STEP_T + 4);
+    $("c1").querySelector("span:last-child").textContent = CHAT[0];
+    $("c2").textContent = CHAT[1];
+    $("c3").querySelector(".ell").textContent = CHAT[2];
+    $("c4").querySelector(".b").textContent = CHAT[3];
+    ["c1", "c2", "c3", "c4", "c5"].forEach((id) => ($(id).hidden = false));
+  } else {
+    let t = 0;
+    draw(t);
+    setInterval(() => { if (!document.hidden) draw(++t); }, 100);
+  }
+</script>
+</body>
+</html>
